@@ -1,0 +1,300 @@
+# Role
+你是一位拥有20年经验的**高级系统架构师**和**技术商业分析师（Technical BA）**，擅长输出极具落地性的《功能需求规格说明书》（FRD）。你精通模块化设计（Modular Design）和领域驱动设计（DDD），能够准确识别代码中的业务逻辑、边界条件和数据流向。
+
+#task
+根据我的功能描述，完成需求文档，你可以自行进行合理必要的补充，最好是以与我对话的模式，一边问我问题一边补充。
+
+
+# Constraints & Guidelines (至关重要)
+1. **开发导向**：不要只写“用户可以登录”，要写清楚“后端接收API /login，校验字段A和B，查询数据库表C，比对Hash值，返回JWT Token”这种级别的逻辑。
+2. **模块解耦**：明确划分功能模块，定义模块间的输入输出（I/O）边界，确保后续可以针对单一模块进行独立开发和Debug。
+
+
+# Output Format (请严格遵守此模板)
+
+## 3. 功能模块详情 (Functional Requirements) - 核心部分
+*请按模块（Module）进行分组，每个模块包含多个功能点（Feature）。*
+
+
+#### 功能点 A.1: [功能名称，例如：用户注册]
+*   **功能描述**：简述该功能的作用。
+*   **输入参数 (Input)**：[列出API请求参数或函数入参，包括类型和校验规则]
+*   **处理逻辑 (Implementation Logic)**：
+    *   *请用逻辑步骤描述，例如：*
+    1. 接收前端POST请求及JSON数据。
+    2. 校验Email格式是否合法（参考 `utils/validator.js`）。
+    3. 查询数据库检查Email是否已存在。
+    4. 对密码进行Bcrypt加密（Salt rounds=10）。
+    5. 写入User表。
+    6. 记录日志。
+*   **输出/返回值 (Output)**：[成功返回的数据结构 / 失败的错误码]
+*   **异常处理 (Edge Cases)**：[代码中处理了哪些报错？例如数据库连接失败、字段缺失]
+*   **依赖项**：[该功能依赖哪些外部服务、工具类或配置]
+
+*(按需重复上述结构，列出该模块下所有功能)*
+
+### 模块 B: [模块名称]
+...
+
+
+
+
+
+#详细的需求描述如下
+
+
+系统总结构
+     用户交互层 (User Interface Layer)               │  
+│    - Terminal REPL                                      │                                  │  
+└─────────────────────────────────────────────────────────┘  
+                          ↓  
+┌─────────────────────────────────────────────────────────┐  
+│         命令编排层 (Command Orchestration Layer)         │  
+│    - Slash Commands (/command)                          │  
+                   │  
+└─────────────────────────────────────────────────────────┘  
+                          ↓  
+┌─────────────────────────────────────────────────────────┐  
+│        智能体执行层 (Agent Execution Layer)              │  
+│    - Main Agent                                         │  
+│    - Sub-agents (Task Tool)                             │  
+│                 │  
+└─────────────────────────────────────────────────────────┘  
+                          ↓  
+┌─────────────────────────────────────────────────────────┐  
+│         工具执行层 (Tool Execution Layer)                │  
+│    - Built-in Tools (Read/Write/Edit/Bash/Grep/Glob)   │  
+│                                   │  
+└─────────────────────────────────────────────────────────┘  
+                          ↓  
+┌─────────────────────────────────────────────────────────┐  
+│          Hook 拦截层 (Hook Interception Layer)          │  
+│    - PreToolUse / PostToolUse                           │  
+│    - SessionStart / Stop                                │                                  │  
+└─────────────────────────────────────────────────────────┘  
+                        
+
+命令层主要负责实现和执行斜杠命令（slash commands），提供扩展系统功能的能力。
+核心功能
+自定义命令定义：通过markdown文件定义斜杠命令
+参数处理：支持命令参数和参数提示
+工具权限控制：通过allowed-tools限制命令可使用的工具
+模型选择：可为命令指定特定的AI模型
+
+
+
+
+终端REPL (Terminal REPL):
+职责: 系统的入口与出口。负责接收用户原始输入，并将最终结果渲染展示给用户。不包含复杂业务逻辑。
+会话管理器 (Session Manager):
+职责: 核心调度器。负责解析输入、加载静态配置、管理会话生命周期、组装上下文，并将任务分发给主代理。
+配置管理器 (Configuration Manager):
+职责: 提供静态配置数据（如读取项目根目录下的配置文件）。
+钩子系统 (Hook System):
+职责: 事件拦截与处理系统。允许在特定生命周期节点（SessionStart, PreTool, PostTool）注入逻辑或修改数据。
+主代理 (Main Agent):
+职责: 智能决策核心。负责与 LLM (Anthropic API) 交互，处理工具调用请求，并协调工具执行器。
+工具执行器 (Tool Executor):
+职责: 沙箱执行环境。负责实际执行具体的指令（如 Bash 命令）并捕获标准输出/错误。
+Anthropic API:
+职责: 外部大模型服务，提供推理和工具调用指令。
+
+
+
+
+Task Tool（任务工具）
+Task 工具是整个分层系统的核心，负责生成子代理：
+主要功能：
+子代理生成：主代理使用 Task 工具创建新的子代理执行特定任务
+模型选择：可以为子代理指定不同的模型（Haiku、Sonnet、Opus） CHANGELOG.md:754
+工具限制：通过 allowed-tools 前置元数据限制子代理可访问的工具 code-review.md:1-4
+依赖追踪：支持子代理之间的依赖关系，一个子代理可以依赖另一个完成 CHANGELOG.md:148
+
+
+
+"工具的定义"
+File Operation Tools
+Read
+Reads file contents or directory listings
+Supports PDF page ranges via pages parameter (e.g., pages: "1-5")
+Large PDFs (>10 pages) return lightweight references when @-mentioned
+
+Write
+Creates or overwrites files
+Respects system umask for file permissions
+File creation requires user approval in some configurations
+
+Edit
+Modifies existing files using line-based edits
+Renders preview diffs before applying changes
+System prompts guide Claude to prefer Edit over bash sed/awk
+
+Glob
+File pattern matching and discovery
+Returns file paths matching glob patterns
+
+
+Code Intelligence Tools
+
+Grep
+Search file contents using ripgrep
+Timeout handling for large searches
+Reports errors instead of silently returning empty results
+
+LSP (Language Server Protocol)
+Code intelligence features (go-to-definition, find references, hover docs)
+Configured via LSP server settings
+Only enabled when LSP servers are configured
+
+
+Execution Tools
+
+Bash
+Executes shell commands
+Subject to permission rules and optional sandboxing
+Supports command history autocomplete in bash mode
+Large outputs saved to disk with file references
+Timeout tracking with elapsed time display
+
+
+Agent Management Tools
+
+Task
+Creates background subagents with independent context windows
+Configurable model, allowed-tools, permissions, and skill inheritance
+Returns metrics: token count, tool uses, duration
+
+TaskUpdate
+Reports progress from subagents to main agent
+Supports task deletion
+
+TaskOutput
+Delivers final results from subagents
+
+TaskStop
+Stops running tasks
+Displays stopped command/task description in result
+
+Web Access Tools
+
+WebSearch
+Internet search capabilities
+Can be denied in restricted configurations
+
+WebFetch
+Retrieves webpage content
+Can be denied in restricted configurations
+
+
+"工具调用的workflow"
+阶段一：意图识别与权限初审 (Intent & Permission Check)
+发起调用: Claude (LLM) 发出 invokes tool 信号，系统生成标准化的 Tool Call Request 对象（包含工具名、参数、上下文）。
+权限策略评估: 权限控制引擎 接收请求，根据策略配置（例如：config.json 中的 auto-allow 列表）进行判断，产生三种分支：
+分支 A (Allow): 策略允许（如只读命令），直接进入下一阶段（PreToolUse Hook）。
+分支 B (Deny): 策略禁止（如系统级高危命令），直接跳转至 Tool Use Denied 状态。
+
+
+阶段三：逻辑拦截与修正 (Pre-Execution Interception)
+(此时请求已获得“策略”或“用户”的合法性授权，现在进行“程序逻辑”校验)
+触发 PreToolUse: 钩子中间件 接收请求。开发者可在此处编写脚本逻辑（如：检查文件路径是否存在、修补缺失参数）。
+钩子决策:
+通过/修改 (Approved/Modified): 钩子返回原参数或修改后的参数，进入执行阶段。
+拒绝 (Denied): 钩子逻辑判断有误（如参数格式错误），强制拦截，跳转至 Tool Use Denied 状态。
+
+阶段四：路由与物理执行 (Routing & Execution)
+工具分发: 执行路由 根据工具类型进行分流：
+Type: Bash Tool: 路由至 Bash Sandbox。这是一个隔离环境，用于执行 Shell 命令，捕获 stdout/stderr。
+Type: Other Tools: 路由至 Direct Execution。直接在主进程或指定环境中运行函数代码。
+执行结果: 无论成功或失败，执行器都必须返回标准化的输出结构。
+
+阶段五：结果后处理与反馈 (Post-Processing & Feedback)
+触发 PostToolUse: 钩子中间件 接收原始执行结果。可在此处进行脱敏（如隐藏 Secret Key）或格式化。
+结果打包: 系统将最终的 Tool Result（包括执行输出或 Denied 错误信息）打包。
+回传上下文: 结果被发送回 Claude (LLM)，完成一次完整的思维循环（Loop）。
+
+
+
+“代理模块”
+
+代理的沟通机制
+
+主代理必须显式地将上下文传递给子代理
+主代理和子代理上下文隔离避免污染主线程
+主代理可以动态选择子代理使用的模型
+
+Subagent 的触发完全由主代理决定：
+需要同时执行多个独立任务
+当一个任务依赖另一个任务的完成结果时
+
+子代理可以异步发送消息唤醒主代理，通知任务完成或失败
+
+
+“hook模块”
+
+The Hook System is a middleware and lifecycle event architecture that enables plugins, skills, and agents to intercept and modify Claude Code's behavior at key execution points. Hooks can inject additional context, modify tool inputs, auto-approve permissions, and execute custom logic before or after tool usage. This system is fundamental to Claude Code's extensibility model.
+
+
+SessionStart Hooks
+Purpose: Execute custom logic at session initialization, before the first user message is processed.
+
+Key Capability: additionalContext injection - hooks can return context that gets appended to the system prompt for the entire session.
+
+Input Fields:
+
+agent_type: Populated when --agent CLI flag is specified
+Common Uses:
+
+Adding behavioral instructions (e.g., output style preferences)
+Loading project-specific guidelines
+Setting up session-wide configurations
+
+PreToolUse Hooks
+Purpose: Intercept tool calls before execution, acting as middleware to modify inputs or request user approval.
+
+Key Capabilities:
+
+Return additionalContext to provide the model with additional information
+Return updatedInput to modify tool parameters
+Return ask permission decision to request user consent (even while modifying input)
+Execution Flow: Hooks fire in sequence before the tool executes. If any hook returns a permission decision, that decision applies.
+
+Timeout: 10 minutes (changed from 60 seconds in v2.1.3)
+
+Common Uses:
+
+Validating tool inputs against project rules
+Transforming command syntax
+Adding safety checks or logging
+
+PostToolUse Hooks
+Purpose: Execute custom logic after tool execution completes, with access to both inputs and outputs.
+
+Input Fields:
+
+Tool name and input parameters
+Tool execution result
+Timeout: 10 minutes
+
+Common Uses:
+
+Logging tool usage
+Triggering notifications
+Post-processing tool outputs
+Recording metrics
+
+
+
+"上下文管理"
+上下文的来源：
+User messages
+Assistant messages	Model responses including thinking blocks
+Tool inputs/outputs	Bash commands, file operations, search results
+System prompts	Base instructions, CLAUDE.md, skills frontmatter
+Subagent transcripts	Independent context windows for background agents
+
+系统需要一直监控有效的上下文长度，避免超过了api的限制，如果太长了，超过90%，就要进行压缩了
+
+
+
+
+
