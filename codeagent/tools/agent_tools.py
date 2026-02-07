@@ -1,10 +1,13 @@
 import asyncio
+from typing import Optional
 from pydantic import BaseModel, Field
 from codeagent.tools.registry import tool
 from codeagent.config import get_settings
 
 class TaskArgs(BaseModel):
     goal: str = Field(..., description="The goal or task description for the sub-agent")
+    context_summary: Optional[str] = Field(None, description="Relevant context summary from the parent agent to help the sub-agent")
+    task_id: Optional[str] = Field(None, description="The ID of the task being executed (if part of a plan)")
 
 @tool
 async def submit_task(args: TaskArgs) -> str:
@@ -26,14 +29,15 @@ async def submit_task(args: TaskArgs) -> str:
         )
         
         # Create sub-agent
+        # Force plan_mode=False for sub-agents to avoid infinite recursion
         settings = get_settings()
-        sub_agent = Agent(settings, session=sub_session)
+        sub_agent = Agent(settings, session=sub_session, plan_mode=False)
         
         # Run the sub-agent
         final_answer = ""
-        async for chunk in sub_agent.run(args.goal):
+        # Pass the context_summary to the run loop
+        async for chunk in sub_agent.run(args.goal, context_summary=args.context_summary):
             # For now, we just accumulate the text response
-            # In a real UI, we might want to stream sub-agent thoughts too
             final_answer += chunk
             
         return final_answer or "Task completed (no output)."

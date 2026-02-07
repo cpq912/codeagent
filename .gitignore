@@ -25,3 +25,9 @@ htmlcov/
 .idea/
 .vscode/
 *.swp
+
+# Logs
+logs/trace.log
+
+# Docs/Notes
+问题v1
