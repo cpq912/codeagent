@@ -195,6 +195,10 @@ PR 状态指示器：显示当前分支的 PR 状态（已批准、需要修改�
 可以通过 /statusline 命令添加自定义内容到状态栏，包括终端提示符
 '''
 
+主代理和子代理的架构：
+目的是利用子代里实现子任务的并行处理和独立决策
+子代理有独立的上下文，主代理可以显式把必要的上下文传递给子代理
+
 代理的沟通机制
 
 主代理必须显式地将上下文传递给子代理
@@ -206,6 +210,37 @@ Subagent 的触发完全由主代理决定：
 当一个任务依赖另一个任务的完成结果时
 
 子代理可以异步发送消息唤醒主代理，通知任务完成或失败
+
+
+"任务管理机制"
+为了实现并行，每个任务分配一个subagent，或者是bash任务直接在主代理中执行
+任务的管理需要记录：
+任务ID
+任务状态（运行中、已完成、失败）
+任务依赖关系
+任务执行结果（成功时的输出，失败时的错误信息）
+
+主代理有权删除不需要的，或者中止正在运行的任务。
+
+任务完成后会做下面的事：
+把任务执行结构通知主代理，包括任务ID、状态、执行结果（成功时的输出，失败时的错误信息）
+整个任务完成的完整过程的记录会保留下来，比如调用什么工具，用了多少token，执行了多久，对话的内容等。
+
+主代理会等所有任务完成后再进行下一步响应。也可以又subagent主动唤醒主agent，通过一个触发 SubagentStop hook，包含 agent_id 和 agent_transcript_path 来通知主代理。
+检查 subagent 的结果是否需要主 agent 立即介入
+触发任务重新规划
+中断其他正在进行的 subagent
+
+所以整个任务管理是动态的，主代理可以根据子代理的执行结果，来决定是否继续执行其他任务，或者是否需要重新规划任务。
+
+
+
+
+
+
+
+
+
 
 
 "工具的定义"
@@ -387,5 +422,73 @@ System prompts	Base instructions, CLAUDE.md, skills frontmatter
 Subagent transcripts	Independent context windows for background agents
 
 系统需要一直监控有效的上下文长度，避免超过了api的限制，如果太长了，超过90%，就要进行压缩了
+有效上下文窗口 = 完整上下文窗口 - 最大输出token预留空间
+上下文的使用追踪：要实时统计主代理和子代理的上下文token使用情况，避免超过有效上下文窗口，并计算占到有效上下文窗口的比例。
+
+如果超过了90%，就要进行压缩了。压缩会记录每次的压缩边界，从上次的边界压缩到当前，避免重复压缩。
+同时之前完成的对话也会保存，只是在必须的时候才会重新读取压缩前的内容。
+
+子代理有独立的上下文，并且为了避免整体上下文太长，子代理最后的输出会被压缩到一定的长度，比如10000，完整的上下文会写入disk
 
 
+
+LSP 工具，提供代码智能功能，包括：
+跳转到定义 (go-to-definition)
+查找引用 (find references)
+悬停文档 (hover documentation) CHANGELOG.md:430
+这使 AI 能够理解代码之间的关系和依赖，追踪功能实现的调用链。
+
+
+
+"代码探索的agent"
+## Core Mission
+Provide a complete understanding of how a specific feature works by tracing its implementation from entry points to data storage, through all abstraction layers.
+
+## Analysis Approach
+
+**1. Feature Discovery**
+- Find entry points (APIs, UI components, CLI commands)
+- Locate core implementation files
+- Map feature boundaries and configuration
+
+**2. Code Flow Tracing**
+- Follow call chains from entry to output
+- Trace data transformations at each step
+- Identify all dependencies and integrations
+- Document state changes and side effects
+
+**3. Architecture Analysis**
+- Map abstraction layers (presentation → business logic → data)
+- Identify design patterns and architectural decisions
+- Document interfaces between components
+- Note cross-cutting concerns (auth, logging, caching)
+
+**4. Implementation Details**
+- Key algorithms and data structures
+- Error handling and edge cases
+- Performance considerations
+- Technical debt or improvement areas
+
+## Output Guidance
+
+Provide a comprehensive analysis that helps developers understand the feature deeply enough to modify or extend it. Include:
+
+- Entry points with file:line references
+- Step-by-step execution flow with data transformations
+- Key components and their responsibilities
+- Architecture insights: patterns, layers, design decisions
+- Dependencies (external and internal)
+- Observations about strengths, issues, or opportunities
+- List of files that you think are absolutely essential to get an understanding of the topic in question
+
+
+
+支持mcp的调用
+比如专门解决代码搜索的mcp
+智能解决方案：Claude Context 的工作原理
+Claude Context 另辟蹊径。它并不粗暴地加载所有文件，而是采用了一种更智能、更高效的方式：
+
+代码向量化：它首先会解析你的整个代码库，通过 AST (抽象语法树) 等技术智能地将代码切分成有意义的块（chunks）。
+存入向量数据库：然后，它利用 OpenAI、VoyageAI 等嵌入模型（Embedding Models）将这些代码块转换成向量（vectors），并存储在一个高性能的向量数据库中（如 Zilliz Cloud 或 Milvus）。
+语义搜索：当你向 AI 提问时，Claude Context 会将你的问题也转换成向量，并在数据库中进行混合搜索（结合了 BM25 稀疏检索和向量稠密检索），以闪电般的速度找出与你问题语义最相关的代码片段。
+精准注入上下文：最后，它只将这些最相关的代码片段注入到 AI 的上下文中。

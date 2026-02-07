@@ -1,6 +1,6 @@
 # 功能需求规格说明书 (FRD) - Claude Code CLI 复现项目
 
-**版本**: 1.0
+**版本**: 1.1
 **日期**: 2026-02-06
 **状态**: 拟定中
 
@@ -94,16 +94,33 @@
     4.  **递归/循环**: 接收工具执行结果 (Tool Result)，将其追加到 Context，再次跳转至步骤 1，直到 LLM 停止调用工具。
 
 #### 功能点 3.2: 子代理生成 (Task Tool / Sub-agent)
-*   **功能描述**: 允许 Main Agent 创建子代理来处理隔离的复杂任务。
+*   **功能描述**: 允许 Main Agent 创建子代理来处理隔离的复杂任务，支持可选的 Plan Mode (任务规划模式)。
 *   **处理逻辑**:
     1.  Main Agent 调用 `Task` 工具，传入 `description` 和 `goals`。
+        *   *优化*: 主代理可显式选择将必要的 Context 片段传递给子代理，而非全量或全空。
     2.  **实例化**: 系统创建一个新的 `Agent` 实例（即 Sub-agent）。
-        *   *关键点*: Sub-agent 拥有全新的、空的 Context，仅继承必要的 System Prompt 和任务描述。
-    3.  **栈式执行**: Main Agent 挂起（`await`），控制权移交给 Sub-agent 运行其决策循环。
+    3.  **任务管理与规划 (Plan Mode)**:
+        *   若开启规划模式，主代理先生成任务清单 (Task Plan)，包含任务依赖关系。
+        *   **状态追踪**: 记录每个任务 ID、状态（Pending/Running/Completed/Failed）、执行结果、错误信息。
+        *   **动态调整**: 若子任务失败，主代理介入决策：
+            *   重试 / 调整规划 / 询问用户是否回滚。
+            *   调用 `UpdateTask` 工具中断或修改后续任务。
+    4.  **栈式执行**: Main Agent 挂起（`await`），控制权移交给 Sub-agent 运行其决策循环。
         *   *技术说明*: 依赖全异步 ToolExecutor 架构，确保主事件循环不被阻塞。
-    4.  **结果回传**: Sub-agent 完成任务后，返回最终结果字符串。
-    5.  Main Agent 恢复，将 Sub-agent 的结果视为一次普通的工具调用输出。
+    5.  **结果回传**: Sub-agent 完成任务后，返回最终结果字符串。
+    6.  Main Agent 恢复，将 Sub-agent 的结果视为一次普通的工具调用输出。
 *   **通信模式**: 内存函数调用栈 (Function Call Stack)，父子同步等待。
+
+#### 功能点 3.3: 上下文监控与压缩 (Context Monitor)
+*   **功能描述**: 实时监控上下文长度，避免 API 超限。
+*   **处理逻辑**:
+    1.  **定义有效窗口**: `Effective Window = Model Max Window - Reserved Output Tokens` (e.g., 200k - 8k = 192k)。
+    2.  **实时统计**: 每次交互前计算 `Usage Ratio = Current Tokens / Effective Window`。
+    3.  **阈值触发**: 当 `Usage Ratio > 90%` 时触发压缩。
+    4.  **压缩策略**:
+        *   记录压缩边界 (Compression Boundary)，仅压缩新增内容，避免重复计算。
+        *   保留原始对话记录在磁盘/内存，仅在必要时回溯。
+        *   子代理拥有独立的上下文计数器，不占用主代理窗口（但在 LLM 调用时仍受限于 API 上限）。
 
 ---
 
