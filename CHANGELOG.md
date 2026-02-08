@@ -5,10 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - v1.2 (Planned)
-### Architecture
-- **Plan Mode**: Full implementation of `TaskManager` logic and task state management.
-- **Context Management**: Implementation of `compress_context` strategies.
+## [Unreleased] - v1.3 (Planned)
+### Features
+- **ShellExecutor**: Unified shell execution service for internal and external use.
+- **Smart Context**: Context extraction using `ShellExecutor` for file search.
+
+## [1.2.0] - 2026-02-09
+### Architecture Changes
+- **Unified Shell Executor**: Designed `ShellExecutor` to support both internal context gathering and external tool calls.
 
 ## [1.1.0] - 2026-02-08
 ### Architecture Changes (Based on Technical Design Diff)

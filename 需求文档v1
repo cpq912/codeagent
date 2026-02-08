@@ -1,7 +1,7 @@
 # 功能需求规格说明书 (FRD) - Claude Code CLI 复现项目
 
-**版本**: 1.1
-**日期**: 2026-02-06
+**版本**: 1.2
+**日期**: 2026-02-09
 **状态**: 拟定中
 
 ---
@@ -145,14 +145,22 @@
     *   **`Grep`**: 搜索文件内容（基于 `ripgrep`，支持正则）。
     *   **`Read`**: 读取文件内容（支持行号范围 `start_line` - `end_line` 以节省 Token）。
 
-#### 功能点 4.3: 宿主机 Bash 执行 (Local Bash Tool)
-*   **功能描述**: 在宿主机环境执行 Shell 命令。
+#### 功能点 4.3: 统一 Shell 执行器 (Unified Shell Executor)
+*   **功能描述**: 提供一个底层的、跨平台的 Shell 执行服务，既支持系统内部调用（如 Glob 搜索），也支持通过工具暴露给 LLM。
+*   **设计原则**:
+    *   **统一入口**: `ShellExecutor.run(cmd)`。
+    *   **跨平台**: Windows 自动使用 PowerShell，Linux/Mac 使用 Bash。
+    *   **安全沙箱**: 强制 CWD、黑名单拦截、超时控制。
+*   **使用场景**:
+    1.  **Context Gathering**: 系统内部调用 Shell 进行文件查找、Git 状态检查。
+    2.  **Tool Execution**: 封装为 `run_shell` 工具供 Agent 使用。
+
+#### 功能点 4.4: 宿主机 Bash 执行 (Local Bash Tool)
+*   **功能描述**: 基于 `ShellExecutor` 封装的 LLM 工具。
 *   **处理逻辑**:
-    1.  **安全检查**: 检查命令黑名单（如 `rm -rf /`）。
-    2.  **CWD 锁定**: 确保命令在项目根目录下执行 (`subprocess.run(cwd=project_root)`).
-    3.  **执行**: 启动子进程执行命令。
-    4.  **输出捕获**: 捕获 `stdout` 和 `stderr`。若输出过长（>2000字符），进行截断并提示“Output truncated”。
-    5.  **超时控制**: 设置默认超时时间（如 60秒），防止命令挂死。
+    1.  接收 LLM 的 `command` 参数。
+    2.  调用 `ShellExecutor.run()`。
+    3.  返回标准输出或错误信息。
 
 ---
 

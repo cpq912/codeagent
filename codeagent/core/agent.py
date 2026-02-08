@@ -16,6 +16,7 @@ import codeagent.tools.file_tools
 import codeagent.tools.search_tools
 import codeagent.tools.agent_tools
 import codeagent.tools.task_tools
+import codeagent.tools.shell_tools
 
 logger = logging.getLogger(__name__)
 
