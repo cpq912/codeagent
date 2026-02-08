@@ -52,7 +52,9 @@ class Agent:
             token = current_task_manager.set(self.task_manager)
 
         try:
-            # 1. Add User Message
+            resolved = await self.session.resolve_reference(user_input)
+            if resolved:
+                user_input = f"{user_input}\n\n{resolved}"
             self.session.add_message(Message.user(user_input))
             
             # Inject context if provided (for sub-agents)
@@ -76,7 +78,14 @@ class Agent:
                 # 4. Check for Tool Calls
                 if response_msg.tool_calls:
                     # Notify user (optional yield)
-                    yield f"\n[Executing {len(response_msg.tool_calls)} tool calls...]\n"
+                    tool_names = []
+                    for tc in response_msg.tool_calls:
+                        try:
+                            n = tc.get("function", {}).get("name")
+                        except Exception:
+                            n = None
+                        tool_names.append(n or "unknown")
+                    yield f"\n[Executing {len(response_msg.tool_calls)} tool calls: {', '.join(tool_names)}]\n"
                     
                     # Execute Tools
                     results = await ToolExecutor.execute(response_msg.tool_calls)

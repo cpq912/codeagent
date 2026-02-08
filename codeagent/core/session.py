@@ -61,6 +61,74 @@ class Session:
         """Clear history but keep system prompt."""
         self.history = [Message.system(content=self.system_prompt)]
         self.compression_boundary = 0
+    
+    async def resolve_reference(self, input_text: str) -> str:
+        import re
+        from pathlib import Path
+        
+        if not input_text or "@file:" not in input_text:
+            return ""
+        
+        project_root = Path.cwd().resolve()
+        pattern = re.compile(r"@file:([^\s]+)")
+        keywords = pattern.findall(input_text)
+        if not keywords:
+            return ""
+        
+        files = []
+        seen = set()
+        for kw in keywords:
+            try:
+                if "/" in kw or "\\" in kw:
+                    base = project_root
+                    matches = list(base.glob(kw)) if any(ch in kw for ch in "*?[]") else [base.joinpath(kw)]
+                else:
+                    matches = list(project_root.rglob(f"*{kw}*"))
+                for m in matches:
+                    if not m.exists() or not m.is_file():
+                        continue
+                    rp = m.resolve()
+                    try:
+                        rp.relative_to(project_root)
+                    except Exception:
+                        continue
+                    pstr = str(rp)
+                    if pstr in seen:
+                        continue
+                    seen.add(pstr)
+                    files.append(rp)
+            except Exception:
+                continue
+        
+        if not files:
+            return "<Context><Warning>No files matched for references.</Warning></Context>"
+        
+        MAX_FILES = 10
+        MAX_LINES = 1000
+        MAX_BYTES = 200 * 1024
+        
+        parts = ["<Context>"]
+        for fp in files[:MAX_FILES]:
+            try:
+                text = fp.read_text(encoding="utf-8", errors="ignore")
+                truncated = False
+                if len(text.encode("utf-8")) > MAX_BYTES:
+                    truncated = True
+                    text = text.encode("utf-8")[:MAX_BYTES].decode("utf-8", errors="ignore")
+                lines = text.splitlines()
+                if len(lines) > MAX_LINES:
+                    truncated = True
+                    lines = lines[:MAX_LINES]
+                data = "\n".join(lines)
+                parts.append(f'<File path="{str(fp.relative_to(project_root)).replace("\\","/")}"><![CDATA[')
+                parts.append(data)
+                parts.append("]]></File>")
+                if truncated:
+                    parts.append(f'<Note path="{str(fp.relative_to(project_root)).replace("\\","/")}">Truncated</Note>')
+            except Exception:
+                parts.append(f'<Error path="{str(fp.relative_to(project_root)).replace("\\","/")}">Read failed</Error>')
+        parts.append("</Context>")
+        return "\n".join(parts)
 
     async def compress_context(self, llm_client: "LLMClient"):
         """

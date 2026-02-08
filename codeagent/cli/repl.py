@@ -14,16 +14,16 @@ style = Style.from_dict({
     'prompt': 'ansicyan bold',
 })
 
-def run_repl(settings):
+def run_repl(settings, plan_mode: bool = False):
     """
     Start the Read-Eval-Print Loop with Agent integration.
     """
     # Initialize Agent
-    agent = Agent(settings)
+    agent = Agent(settings, plan_mode=plan_mode)
     
     session = PromptSession(style=style)
     
-    console.print(Panel(f"[bold green]CodeAgent CLI[/bold green]\nModel: {settings.openai_model}", border_style="green"))
+    console.print(Panel(f"[bold green]CodeAgent CLI[/bold green]\nModel: {settings.openai_model}\nPlan Mode: {'ON' if plan_mode else 'OFF'}", border_style="green"))
     console.print("Type 'exit' or 'quit' to close.")
     
     # We need an event loop for async Agent

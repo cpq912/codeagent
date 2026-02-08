@@ -3,6 +3,7 @@ import os
 import platform
 import logging
 import time
+import re
 from typing import List, Optional
 from pydantic import BaseModel
 
@@ -75,12 +76,49 @@ class ShellExecutor:
         shell_cmd = ShellExecutor._detect_shell()
         
         # Construct arguments
+        if platform.system() == "Windows":
+            command = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; " + command
+        # Prefer project virtual environment if present
+        project_root = os.getcwd()
+        if platform.system() == "Windows":
+            venv_dir = os.path.join(project_root, ".venv", "Scripts")
+            venv_python = os.path.join(venv_dir, "python.exe")
+        else:
+            venv_dir = os.path.join(project_root, ".venv", "bin")
+            venv_python = os.path.join(venv_dir, "python")
+        if platform.system() == "Windows":
+            # Normalize PowerShell syntax and enforce venv python within command segments
+            # 1) Replace invalid '&&' with ';'
+            command = command.replace("&&", ";")
+            # 2) Convert 'cd dir' to 'Set-Location dir' at segment starts
+            command = re.sub(r'(^|;)\s*cd\s+', r'\1 Set-Location ', command)
+            # 3) Rewrite python invocations to venv python at segment starts
+            if os.path.exists(venv_python):
+                def _rewrite_py(m: re.Match) -> str:
+                    prefix = m.group(1) or ""
+                    if prefix.strip() == "":
+                        return f'& "{venv_python}" '
+                    else:
+                        return f'{prefix} & "{venv_python}" '
+                command = re.sub(r'(^|;)\s*(?:python|py)\s', _rewrite_py, command)
+        else:
+            # On *nix, if venv exists and command starts with python, rewrite
+            if os.path.exists(venv_python):
+                command = re.sub(r'(^|;)\s*python\s', lambda m: f'{m.group(1) or ""} "{venv_python}" ', command)
         final_args = shell_cmd + [command]
         
         try:
             logger.info(f"Executing shell command: {command} in {cwd}")
             # Note: We use shell=False because we are explicitly invoking the shell executable
             # and passing the command string as an argument.
+            # Prepare environment: inject venv path at the front of PATH if exists
+            env = os.environ.copy()
+            if os.path.isdir(venv_dir):
+                env["PATH"] = venv_dir + os.pathsep + env.get("PATH", "")
+                env["VIRTUAL_ENV"] = os.path.dirname(venv_dir)
+            env["PYTHONUTF8"] = "1"
+            env["PYTHONIOENCODING"] = "utf-8"
+            env["PYTHONPATH"] = project_root + os.pathsep + env.get("PYTHONPATH", "")
             proc = subprocess.run(
                 final_args,
                 cwd=cwd,
@@ -88,7 +126,8 @@ class ShellExecutor:
                 text=True, 
                 timeout=timeout,
                 encoding='utf-8',
-                errors='replace'
+                errors='replace',
+                env=env
             )
             duration = time.time() - start_time
             return CommandResult(

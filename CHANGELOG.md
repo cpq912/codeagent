@@ -4,11 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+markkkkkk: stands for "mark as unsolved issue"
 
 ## [Unreleased] - v1.3 (Planned)
+## [1.3.0] - 2026-02-09
 ### Features
-- **ShellExecutor**: Unified shell execution service for internal and external use.
-- **Smart Context**: Context extraction using `ShellExecutor` for file search.
+- **Smart Context Extractor**: 支持显式 `@file:keyword` 引用，进行 Glob 匹配、自动读取并以结构化片段注入到用户消息，降低初始探索成本
+- **Hybrid Task Model 增强**: `Task` 工具新增可选参数 `resources` 和 `hints`；Sub-agent 初始化时注入上述线索以加速定位上下文
+### Core Changes
+- **Agent**: `run` 流程新增 Smart Extract 预处理步骤，解析并注入解析到的上下文；保持上下文压缩触发逻辑
+- **Session**: 新增 `resolve_reference` 方法占位用于解析 `@file` 引用；保留 `compress_context` 与 `summarize_relevant_context` 的扩展点
+
+### Bug Fixes
+- **PLAN MODE**: Add a configure option in the cli starting command
+- **Shell Executor**: Fix the encoding issue on Windows, and add auto virtual environment support,and add python command execute translation(hardcode, this part has not been perfect solved. markkkkkk) 
 
 ## [1.2.0] - 2026-02-09
 ### Architecture Changes

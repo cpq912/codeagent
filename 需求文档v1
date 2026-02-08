@@ -1,6 +1,6 @@
 # 功能需求规格说明书 (FRD) - Claude Code CLI 复现项目
 
-**版本**: 1.2
+**版本**: 1.3
 **日期**: 2026-02-09
 **状态**: 拟定中
 
@@ -58,6 +58,19 @@
         *   **动作**: 保留最近 N 轮交互（滑动窗口），将更早期的交互发送给 LLM 生成一段 `Summary`（摘要），替换掉旧消息。
 *   **异常处理**: 若单条消息超过 Context 限制，直接报错拒绝处理。
 
+#### 功能点 1.3: 上下文显式提取 (Smart Context Extractor)
+*   **功能描述**: 主动解析用户输入中的 `@file` 引用，智能查找文件并注入上下文，减少 Agent 的初始探索成本。
+*   **输入格式**: `@file:keyword` (例如 `@file:agent`, `@file:src/core/session.py`)。
+*   **处理逻辑**:
+    1.  **解析**: 提取 `@file:` 后的关键词。
+    2.  **智能匹配**:
+        *   调用 `Glob` 或模糊搜索在项目中查找匹配的文件。
+        *   **Case 1 (唯一匹配)**: 自动读取该文件内容。
+        *   **Case 2 (多项匹配)**: 所以匹配文件都读取。
+        *   **Case 3 (无匹配)**: 提示警告。
+    3.  **注入**: 将读取的内容封装为 `<Context><File path="...">...</File></Context>` 格式，附在 User Message 中。
+*   **适用范围**: 主代理交互及子代理的任务描述。
+
 ---
 
 ### 模块 2: 命令编排层 (Command Orchestration Layer)
@@ -98,7 +111,11 @@
 *   **处理逻辑**:
     1.  Main Agent 调用 `Task` 工具，传入 `description` 和 `goals`。
         *   *优化*: 主代理可显式选择将必要的 Context 片段传递给子代理，而非全量或全空。
+        *   **优化 (混合模式 Hybrid Model)**: 主代理需充当 Technical Lead 角色，显式提供线索：
+            *   `resources` (List[str]): 涉及的关键文件路径或目录。
+            *   `hints` (str): 技术实现建议。
     2.  **实例化**: 系统创建一个新的 `Agent` 实例（即 Sub-agent）。
+        *   **初始化增强**: Sub-agent 启动时，System Prompt 会包含 Main Agent 提供的 `resources` 和 `hints`，使其快速定位上下文。
     3.  **任务管理与规划 (Plan Mode)**:
         *   若开启规划模式，主代理先生成任务清单 (Task Plan)，包含任务依赖关系。
         *   **状态追踪**: 记录每个任务 ID、状态（Pending/Running/Completed/Failed）、执行结果、错误信息。

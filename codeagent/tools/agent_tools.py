@@ -1,5 +1,5 @@
 import asyncio
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, Field
 from codeagent.tools.registry import tool
 from codeagent.config import get_settings
@@ -8,6 +8,8 @@ class TaskArgs(BaseModel):
     goal: str = Field(..., description="The goal or task description for the sub-agent")
     context_summary: Optional[str] = Field(None, description="Relevant context summary from the parent agent to help the sub-agent")
     task_id: Optional[str] = Field(None, description="The ID of the task being executed (if part of a plan)")
+    resources: Optional[List[str]] = Field(None, description="Optional list of file paths or directories to guide the sub-agent")
+    hints: Optional[str] = Field(None, description="Optional implementation hints or technical notes")
 
 @tool
 async def submit_task(args: TaskArgs) -> str:
@@ -36,6 +38,13 @@ async def submit_task(args: TaskArgs) -> str:
         # Run the sub-agent
         final_answer = ""
         # Pass the context_summary to the run loop
+        initial_context = []
+        if args.resources:
+            initial_context.append("Resources:\n" + "\n".join(args.resources))
+        if args.hints:
+            initial_context.append("Hints:\n" + args.hints)
+        if initial_context:
+            sub_session.inject_context("\n\n".join(initial_context))
         async for chunk in sub_agent.run(args.goal, context_summary=args.context_summary):
             # For now, we just accumulate the text response
             final_answer += chunk
